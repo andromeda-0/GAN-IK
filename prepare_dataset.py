@@ -26,16 +26,17 @@ def visualize_end_x():
     plt.show()
 
 
-def prepare_data_from_txt():
-    angles = np.genfromtxt('JointData.txt')  # (N,7)
-
+def prepare_data(path, angles, noise=None):
     configurations = np.zeros((angles.shape[0], 7))
 
     for row in range(angles.shape[0]):
         g, x = fk(xis, angles[row], g_0)
         configurations[row] = x
 
-    np.savez_compressed('data_txt.npz', angles=angles, configurations=configurations)
+    if noise is not None:
+        configurations += noise
+
+    np.savez_compressed(path, angles=angles, configurations=configurations)
 
 
 if __name__ == '__main__':
@@ -56,4 +57,10 @@ if __name__ == '__main__':
     xis[3:, 0] = xis[3:, 2] = xis[3:, 4] = xis[3:, 6] = [0, 0, 1]
     xis[3:, 1] = xis[3:, 3] = xis[3:, 5] = [-1, 0, 0]
 
-    prepare_data_from_txt()
+    prepare_data('data_txt.npz', angles=np.genfromtxt('JointData.txt'))
+    rng = np.random.default_rng()
+    angles = rng.random(size=(5000, 7)) * np.pi * 2 - np.pi  # -pi to pi
+    prepare_data('data_random_without_noise.npz', angles=angles)
+    noise_rng = np.random.default_rng()
+    noise = noise_rng.normal(scale=np.pi * 0.1, size=angles.shape)
+    prepare_data('data_random_with_noise.npz', angles=angles, noise=noise)
