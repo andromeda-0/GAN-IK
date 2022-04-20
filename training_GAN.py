@@ -18,8 +18,8 @@ class KinematicsSet(Dataset):
         self.len = angles.shape[0]
         self.feature_size = angles.shape[1]
 
-        self.angles = torch.tensor(angles)
-        self.configurations = torch.tensor(configurations)
+        self.angles = torch.tensor(angles, dtype=torch.float)
+        self.configurations = torch.tensor(configurations, dtype=torch.float)
 
     def __getitem__(self, index):
         return self.angles[index], self.configurations[index]
