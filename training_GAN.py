@@ -2,10 +2,11 @@ import argparse
 
 import numpy as np
 import torch
-
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
+# noinspection PyUnresolvedReferences
 from models import *
 
 
@@ -16,7 +17,8 @@ class KinematicsSet(Dataset):
         configurations = data['configurations']
 
         self.len = angles.shape[0]
-        self.feature_size = angles.shape[1]
+        self.i_size = angles.shape[1]
+        self.o_size = configurations.shape[1]
 
         self.angles = torch.tensor(angles, dtype=torch.float)
         self.configurations = torch.tensor(configurations, dtype=torch.float)
@@ -26,6 +28,15 @@ class KinematicsSet(Dataset):
 
     def __len__(self):
         return self.len
+
+    def mu_sigma(self):
+        """
+        The mean and variance of the angles
+        :return:
+        """
+        mu = torch.mean(self.angles, 0)
+        sigma = torch.std(self.angles, 0)
+        return mu, sigma
 
 
 if __name__ == '__main__':
@@ -40,8 +51,8 @@ if __name__ == '__main__':
     parser.add_argument("--n_cpu", type=int, default=8,
                         help="number of cpu threads to use during batch generation")
     parser.add_argument('--data_path', default='data_7dof/data_txt.npz')
-    parser.add_argument("--latent_dim", type=int, default=100,
-                        help="dimensionality of the latent space")
+    parser.add_argument('--generator', default='Generator_0')
+    parser.add_argument('--discriminator', default='Discriminator')
     parser.add_argument('--gpu_id', default=0, type=int)
     args = parser.parse_args()
     print(args)
@@ -54,8 +65,8 @@ if __name__ == '__main__':
     dataset = KinematicsSet(args.data_path)
 
     # Initialize generator and discriminator
-    generator = Generator_Base(dataset.feature_size, args.latent_dim)
-    discriminator = Discriminator_Base(dataset.feature_size)
+    generator = eval(args.generator + '(dataset.i_size, dataset.o_size)')
+    discriminator = eval(args.discriminator + '(dataset.i_size + dataset.o_size)')
 
     generator.to(device)
     discriminator.to(device)
@@ -71,20 +82,27 @@ if __name__ == '__main__':
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
 
-    writer = SummaryWriter('./runs')
+    writer = SummaryWriter('./runs/%s_%s' % (args.generator, args.discriminator))
 
-    for epoch in range(args.n_epochs):
+    mean, std = dataset.mu_sigma()
+
+    for epoch in tqdm(range(args.n_epochs)):
         for i, (angles, configurations) in enumerate(dataloader):
-            i_o = torch.concat([angles, configurations]).to(device)
-            valid = torch.ones((i_o.shape[0], 1), device=device)
-            fake = torch.zeros((i_o.shape[0], 1), device=device)
+            I = angles.to(device=device)
+            O = configurations.to(device=device)
+            valid = torch.ones((I.shape[0], 1), device=device)
+            fake = torch.zeros((I.shape[0], 1), device=device)
 
             optimizer_G.zero_grad()
 
-            z = torch.normal(0, 1, size=(i_o.shape[0], args.latent_dim), device=device)
+            synthetic_i = torch.zeros((angles.shape[0], dataset.i_size))
+            for channel in range(dataset.i_size):
+                synthetic_i[channel, :] = torch.normal(mean, std)
+            synthetic_i = synthetic_i.to(device=device)
 
             # Generate a batch of images
-            synthetic_i_o = generator(z)
+            synthetic_o = generator(synthetic_i)
+            synthetic_i_o = torch.cat([synthetic_i, synthetic_o], dim=1)
 
             # Loss measures generator's ability to fool the discriminator
             g_loss = adversarial_loss(discriminator(synthetic_i_o), valid)
@@ -95,7 +113,8 @@ if __name__ == '__main__':
             optimizer_D.zero_grad()
 
             # Measure discriminator's ability to classify real from generated samples
-            real_loss = adversarial_loss(discriminator(i_o), valid)
+            real_i_o = torch.cat([I, O], dim=1)
+            real_loss = adversarial_loss(discriminator(real_i_o), valid)
             fake_loss = adversarial_loss(discriminator(synthetic_i_o.detach()), fake)
             d_loss = (real_loss + fake_loss) / 2
 
