@@ -51,8 +51,6 @@ if __name__ == '__main__':
                         help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999,
                         help="adam: decay of first order momentum of gradient")
-    parser.add_argument("--n_cpu", type=int, default=8,
-                        help="number of cpu threads to use during batch generation")
     parser.add_argument('--data_path', default='data_7dof/data_txt.npz')
     parser.add_argument('--generator', default='Generator_0')
     parser.add_argument('--discriminator', default='Discriminator')
