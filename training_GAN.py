@@ -5,6 +5,8 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import hashlib
+import json
 
 # noinspection PyUnresolvedReferences
 from models import *
@@ -43,7 +45,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
+    parser.add_argument("--lr_g", type=float, default=0.0002, help="adam: learning rate")
+    parser.add_argument('--lr_d', type=float, default=0.0002)
     parser.add_argument("--b1", type=float, default=0.5,
                         help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999,
@@ -55,7 +58,11 @@ if __name__ == '__main__':
     parser.add_argument('--discriminator', default='Discriminator')
     parser.add_argument('--gpu_id', default=0, type=int)
     args = parser.parse_args()
-    print(args)
+
+    run_id = str(vars(args)).encode('utf-8')
+    config_string = hashlib.md5(run_id).hexdigest()
+    with open('configs/%s.json' % config_string, 'w') as f:
+        json.dump(vars(args), f)
 
     device = torch.device('cuda:%d' % args.gpu_id)
 
@@ -79,10 +86,11 @@ if __name__ == '__main__':
     )
 
     # Optimizers
-    optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
-    optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
+    optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr_g, betas=(args.b1, args.b2))
+    optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=args.lr_d,
+                                   betas=(args.b1, args.b2))
 
-    writer = SummaryWriter('./runs/%s_%s' % (args.generator, args.discriminator))
+    writer = SummaryWriter('./runs/%s' % config_string)
 
     mean, std = dataset.mu_sigma()
 
