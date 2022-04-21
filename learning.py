@@ -110,3 +110,9 @@ class GAN(Learning):
 
                 self.writer.add_scalar('Discriminator Loss', d_loss.item(), epoch)
                 self.writer.add_scalar('Generator Loss', g_loss.item(), epoch)
+
+
+class cGAN(Learning):
+    def __init__(self, args):
+        super(cGAN, self).__init__(args)
+

@@ -1,9 +1,9 @@
 import torch.nn as nn
 
 
-class Generator(nn.Module):
+class cGenerator(nn.Module):
     def __init__(self, i_size, o_size):
-        super(Generator, self).__init__()
+        super(cGenerator, self).__init__()
         self.i_size = i_size
         self.o_size = o_size
 
@@ -16,7 +16,7 @@ class Generator(nn.Module):
         return layers
 
 
-class Generator_0(Generator):
+class Generator_0(cGenerator):
     def __init__(self, i_size, o_size):
         super().__init__(i_size, o_size)
 
@@ -33,7 +33,7 @@ class Generator_0(Generator):
         return self.model(z)
 
 
-class Generator_1(Generator):
+class cGenerator_1(cGenerator):
     def __init__(self, i_size, o_size):
         super().__init__(i_size, o_size)
 
@@ -50,7 +50,7 @@ class Generator_1(Generator):
         return self.model(z)
 
 
-class Discriminator(nn.Module):
+class cDiscriminator(nn.Module):
     def __init__(self, io_size):
         super().__init__()
 
