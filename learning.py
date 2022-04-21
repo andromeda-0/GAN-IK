@@ -43,17 +43,22 @@ class Learning:
         self.config_string = hashlib.md5(run_id).hexdigest()
         with open('configs/%s.json' % self.config_string, 'w') as f:
             json.dump(vars(args), f)
+        self.device = torch.device('cuda:%d' % args.gpu_id)
+        self.dataset = KinematicsSet(args.data_path)
+        self.dataloader = torch.utils.data.DataLoader(
+                self.dataset,
+                batch_size=args.batch_size,
+                shuffle=True,
+        )
+        self.writer = SummaryWriter('./runs/%s' % self.config_string)
+        self.mean, self.std = self.dataset.mu_sigma()
 
 
 class GAN(Learning):
     def __init__(self, args):
         super(GAN, self).__init__(args)
-        self.device = torch.device('cuda:%d' % args.gpu_id)
+
         self.adversarial_loss = torch.nn.BCELoss()
-
-        self.dataset = KinematicsSet(args.data_path)
-
-        # Initialize generator and discriminator
         self.generator = eval(args.generator + '(dataset.i_size, dataset.o_size)')
         self.discriminator = eval(args.discriminator + '(dataset.i_size + dataset.o_size)')
 
@@ -61,21 +66,11 @@ class GAN(Learning):
         self.discriminator.to(self.device)
         self.adversarial_loss.to(self.device)
 
-        self.dataloader = torch.utils.data.DataLoader(
-                self.dataset,
-                batch_size=args.batch_size,
-                shuffle=True,
-        )
-
         # Optimizers
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=args.lr_g,
                                             betas=(args.b1, args.b2))
         self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=args.lr_d,
                                             betas=(args.b1, args.b2))
-
-        self.writer = SummaryWriter('./runs/%s' % self.config_string)
-
-        self.mean, self.std = self.dataset.mu_sigma()
 
     def __call__(self):
         for epoch in tqdm(range(self.args.n_epochs)):
