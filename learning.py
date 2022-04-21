@@ -68,8 +68,8 @@ class KinematicsSubset(Dataset):
 class Learning(ABC):
     def __init__(self, args):
         self.args = args
-        run_id = str(vars(args)).encode('utf-8')
-        self.config_string = hashlib.md5(run_id).hexdigest()
+        run_id = str(vars(args))
+        self.config_string = hashlib.md5(run_id.encode('utf-8')).hexdigest()
         if not os.path.exists('configs/'):
             os.mkdir('configs')
         with open('configs/%s.json' % self.config_string, 'w') as f:
@@ -88,7 +88,7 @@ class Learning(ABC):
 
         self.valid_loader = DataLoader(self.valid_set, batch_size=args.batch_size, shuffle=False)
 
-        self.writer = SummaryWriter('./runs/%s' % self.config_string)
+        self.writer = SummaryWriter('runs/' + self.config_string)
         self.mean, self.std = self.train_set.dataset.mean_std_config()
         self.current_synthetic_angles = None
         self.current_real_angles = None
@@ -114,6 +114,7 @@ class Learning(ABC):
         for epoch in tqdm(range(self.args.n_epochs)):
             self._train_epoch(epoch)
             self.valid(epoch)
+        self.writer.close()
 
     def valid(self, epoch):
         with torch.no_grad():
@@ -123,6 +124,7 @@ class Learning(ABC):
             self._validate_epoch(epoch)
             rmse_ik = self.metric(self.current_real_angles, self.current_synthetic_angles)
             self.writer.add_scalar('Valid/RMSE', rmse_ik, global_step=epoch)
+            self.writer.flush()
 
 
 class cGAN(Learning):
@@ -192,7 +194,9 @@ class cGAN(Learning):
             self.optimizer_D.step()
 
             self.writer.add_scalar('Discriminator Loss', d_loss.item(), epoch)
+            self.writer.flush()
             self.writer.add_scalar('Generator Loss', g_loss.item(), epoch)
+            self.writer.flush()
 
     def _validate_epoch(self, epoch):
         self.generator.eval()
