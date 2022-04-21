@@ -66,3 +66,26 @@ class cDiscriminator(nn.Module):
         validity = self.model(x)
 
         return validity
+
+
+class Dense(nn.Module):
+    def __init__(self, config_dim, angle_dim):
+        super().__init__()
+        self.model = nn.Sequential(
+                nn.Linear(config_dim, 32),
+                nn.ReLU(),
+                nn.Dropout(0.2),
+                nn.Linear(32, 128),
+                nn.ReLU(),
+                nn.Dropout(0.2),
+                nn.Linear(128, 256),
+                nn.ReLU(),
+                nn.Dropout(0.2),
+                nn.Linear(256, 64),
+                nn.ReLU(),
+                nn.Dropout(0.2),
+                nn.Linear(64, angle_dim)
+        )
+
+    def forward(self, x):
+        return self.model(x)

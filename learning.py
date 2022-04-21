@@ -152,6 +152,9 @@ class cGAN(Learning):
     def _train_epoch(self, epoch):
         self.generator.train()
         self.discriminator.train()
+        i = 0
+        g_loss_mean = 0
+        d_loss_mean = 0
         for i, (angles, configurations, _) in enumerate(self.train_loader):
             # during training, we do not have access to noise-free configurations
             I = configurations.to(device=self.device)
@@ -180,6 +183,7 @@ class cGAN(Learning):
             g_loss = self.adversarial_loss(self.discriminator(synthetic_i_o), valid)
 
             g_loss.backward()
+            g_loss_mean += g_loss.item()
             self.optimizer_G.step()
 
             self.optimizer_D.zero_grad()
@@ -191,20 +195,21 @@ class cGAN(Learning):
             d_loss = (real_loss + fake_loss) / 2
 
             d_loss.backward()
+            d_loss_mean += d_loss.item()
             self.optimizer_D.step()
 
-            self.writer.add_scalar('Discriminator Loss', d_loss.item(), epoch)
-            self.writer.flush()
-            self.writer.add_scalar('Generator Loss', g_loss.item(), epoch)
-            self.writer.flush()
+        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (i + 1), epoch)
+        self.writer.flush()
+        self.writer.add_scalar('Generator Loss', g_loss_mean / (i + 1), epoch)
+        self.writer.flush()
 
     def _validate_epoch(self, epoch):
         self.generator.eval()
         self.discriminator.eval()
-        for i, (angles, _, configurations_without_noise) in enumerate(
+        for i, (angles, configurations, _) in enumerate(
                 self.valid_loader):
             # during validation, we do not need the noised configuration
-            I = configurations_without_noise.to(device=self.device)
+            I = configurations.to(device=self.device)
             real_O = angles.to(device=self.device)
 
             predicted_o = self.generator(I)
@@ -238,7 +243,9 @@ class cwGAN(Learning):
     def _train_epoch(self, epoch):
         self.generator.train()
         self.discriminator.train()
-        g_loss = 0
+        g_loss_mean = 0
+        d_loss_mean = 0
+        i = 0
         for i, (angles, configurations, _) in enumerate(self.train_loader):
             # during training, we do not have access to noise-free configurations
             I = configurations.to(device=self.device)
@@ -264,6 +271,7 @@ class cwGAN(Learning):
                     self.discriminator(synthetic_i_o))
             d_loss.backward()
             self.optimizer_D.step()
+            d_loss_mean += d_loss.item()
 
             if i % self.args.n_critic == 0:
                 self.optimizer_G.zero_grad()
@@ -272,12 +280,13 @@ class cwGAN(Learning):
                 g_loss = -torch.mean(self.discriminator(synthetic_i_o))
                 g_loss.backward()
                 self.optimizer_G.step()
-                g_loss = g_loss.item()
+                g_loss_mean += g_loss.item()
 
-            self.writer.add_scalar('Discriminator Loss', d_loss.item(), epoch)
-            self.writer.flush()
-            self.writer.add_scalar('Generator Loss', g_loss, epoch)
-            self.writer.flush()
+        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (i + 1), epoch)
+        self.writer.flush()
+        self.writer.add_scalar('Generator Loss',
+                               g_loss_mean / (i + 1) * self.args.n_critic, epoch)
+        self.writer.flush()
 
     def _validate_epoch(self, epoch):
         self.generator.eval()
@@ -289,6 +298,62 @@ class cwGAN(Learning):
             real_O = angles.to(device=self.device)
 
             predicted_o = self.generator(I)
+
+            self.current_real_angles[i * self.args.batch_size:
+                                     (i + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_angles[i * self.args.batch_size:
+                                          (i + 1) * self.args.batch_size, :] = predicted_o
+
+
+class DiscriminativeModel(Learning):
+    def __init__(self, args):
+        super().__init__(args)
+
+        self.loss = torch.nn.MSELoss()
+        self.model: nn.Module = eval(
+                args.discriminator + '(self.train_set.dataset.config_dim,'
+                                     ' self.train_set.dataset.angle_dim)')
+
+        self.model.to(self.device)
+        self.loss.to(self.device)
+
+        # Optimizers
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=args.lr_d,
+                                          betas=(args.b1, args.b2))
+
+    def _train_epoch(self, epoch):
+        self.model.train()
+        loss_mean = 0.0
+        i = 0
+        for i, (angles, configurations, _) in enumerate(self.train_loader):
+            I = configurations.to(device=self.device)
+            O = angles.to(device=self.device)
+
+            self.optimizer.zero_grad()
+
+            # Generate a batch of images
+            synthetic_o = self.model(I)
+
+            # Loss measures generator's ability to fool the discriminator
+            loss = self.loss(synthetic_o, O)
+
+            loss.backward()
+            self.optimizer.step()
+
+            loss_mean += loss.item()
+
+        self.writer.add_scalar('Discriminator Loss', loss_mean / (i + 1), epoch)
+        self.writer.flush()
+
+    def _validate_epoch(self, epoch):
+        self.model.eval()
+        for i, (angles, configurations, configurations_without_noise) in enumerate(
+                self.valid_loader):
+            # during validation, we do not need the noised configuration
+            I = configurations.to(device=self.device)
+            real_O = angles.to(device=self.device)
+
+            predicted_o = self.model(I)
 
             self.current_real_angles[i * self.args.batch_size:
                                      (i + 1) * self.args.batch_size, :] = real_O
