@@ -27,16 +27,19 @@ def visualize_end_x():
 
 
 def prepare_data(path, angles, noise=None):
-    configurations = np.zeros((angles.shape[0], 7))
+    configurations_without_noise = np.zeros((angles.shape[0], 7))
 
     for row in range(angles.shape[0]):
         g, x = fk(xis, angles[row], g_0)
-        configurations[row] = x
+        configurations_without_noise[row] = x
 
-    if noise is not None:
-        configurations += noise
+    if noise is None:
+        noise = np.zeros_like(configurations_without_noise)
 
-    np.savez_compressed(path, angles=angles, configurations=configurations)
+    configurations = configurations_without_noise + noise
+
+    np.savez_compressed(path, angles=angles, configurations=configurations,
+                        configurations_without_noise=configurations_without_noise)
 
 
 if __name__ == '__main__':

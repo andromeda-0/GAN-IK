@@ -19,8 +19,8 @@ if __name__ == '__main__':
     parser.add_argument('--generator', default='cGenerator_0')
     parser.add_argument('--discriminator', default='cDiscriminator')
     parser.add_argument('--gpu_id', default=0, type=int)
-    parser.add_argument('--learning', default='GAN')
+    parser.add_argument('--learning', default='cGAN')
     args = parser.parse_args()
 
     learning = eval(args.learning + '(args)')
-    learning()
+    learning.train()
