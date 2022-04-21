@@ -16,7 +16,7 @@ class cGenerator(nn.Module):
         return layers
 
 
-class Generator_0(cGenerator):
+class cGenerator_0(cGenerator):
     def __init__(self, i_size, o_size):
         super().__init__(i_size, o_size)
 

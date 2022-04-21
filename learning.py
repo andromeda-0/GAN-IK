@@ -5,6 +5,8 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import hashlib
 import json
+# noinspection PyUnresolvedReferences
+from models import *
 
 
 class KinematicsSet(Dataset):
@@ -59,8 +61,9 @@ class GAN(Learning):
         super(GAN, self).__init__(args)
 
         self.adversarial_loss = torch.nn.BCELoss()
-        self.generator = eval(args.generator + '(dataset.i_size, dataset.o_size)')
-        self.discriminator = eval(args.discriminator + '(dataset.i_size + dataset.o_size)')
+        self.generator = eval(args.generator + '(self.dataset.i_size, self.dataset.o_size)')
+        self.discriminator = eval(
+            args.discriminator + '(self.dataset.i_size + self.dataset.o_size)')
 
         self.generator.to(self.device)
         self.discriminator.to(self.device)
@@ -115,4 +118,3 @@ class GAN(Learning):
 class cGAN(Learning):
     def __init__(self, args):
         super(cGAN, self).__init__(args)
-
