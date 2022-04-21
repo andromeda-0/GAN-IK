@@ -20,6 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('--discriminator', default='cDiscriminator')
     parser.add_argument('--gpu_id', default=0, type=int)
     parser.add_argument('--learning', default='cGAN')
+    parser.add_argument('--n_critic', default=5, type=int)
     args = parser.parse_args()
 
     learning = eval(args.learning + '(args)')

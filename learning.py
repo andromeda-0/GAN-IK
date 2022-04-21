@@ -213,3 +213,84 @@ class cGAN(Learning):
                                      (i + 1) * self.args.batch_size, :] = real_O
             self.current_synthetic_angles[i * self.args.batch_size:
                                           (i + 1) * self.args.batch_size, :] = predicted_o
+
+
+class cwGAN(Learning):
+    def __init__(self, args):
+        super().__init__(args)
+
+        self.generator: nn.Module = eval(
+                args.generator + '(self.train_set.dataset.config_dim,'
+                                 ' self.train_set.dataset.angle_dim)')
+        self.discriminator: nn.Module = eval(
+                args.discriminator + '(self.train_set.dataset.config_dim'
+                                     ' + self.train_set.dataset.angle_dim)')
+
+        self.generator.to(self.device)
+        self.discriminator.to(self.device)
+
+        # Optimizers
+        self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=args.lr_g,
+                                            betas=(args.b1, args.b2))
+        self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=args.lr_d,
+                                            betas=(args.b1, args.b2))
+
+    def _train_epoch(self, epoch):
+        self.generator.train()
+        self.discriminator.train()
+        g_loss = 0
+        for i, (angles, configurations, _) in enumerate(self.train_loader):
+            # during training, we do not have access to noise-free configurations
+            I = configurations.to(device=self.device)
+            O = angles.to(device=self.device)
+
+            self.optimizer_D.zero_grad()
+
+            synthetic_i = torch.zeros((configurations.shape[0],) +
+                                      self.train_set.configurations_shape()[1:])
+            for channel in range(synthetic_i.shape[0]):
+                synthetic_i[channel, :] = torch.normal(self.mean, self.std)
+            # clip from -pi to pi
+            synthetic_i = torch.clip(synthetic_i, -torch.pi, torch.pi)
+            synthetic_i = synthetic_i.to(device=self.device)
+
+            # Generate a batch of images
+            synthetic_o = self.generator(synthetic_i)
+
+            synthetic_i_o = torch.cat([synthetic_i, synthetic_o], dim=1)
+            real_i_o = torch.cat([I, O], dim=1)
+
+            d_loss = -torch.mean(self.discriminator(real_i_o)) + torch.mean(
+                    self.discriminator(synthetic_i_o))
+            d_loss.backward()
+            self.optimizer_D.step()
+
+            if i % self.args.n_critic == 0:
+                self.optimizer_G.zero_grad()
+                synthetic_o = self.generator(synthetic_i)
+                synthetic_i_o = torch.cat([synthetic_i, synthetic_o], dim=1)
+                g_loss = -torch.mean(self.discriminator(synthetic_i_o))
+                g_loss.backward()
+                self.optimizer_G.step()
+                g_loss = g_loss.item()
+
+            self.writer.add_scalar('Discriminator Loss', d_loss.item(), epoch)
+            self.writer.flush()
+            self.writer.add_scalar('Generator Loss', g_loss, epoch)
+            self.writer.flush()
+
+    def _validate_epoch(self, epoch):
+        self.generator.eval()
+        self.discriminator.eval()
+        for i, (angles, _, configurations_without_noise) in enumerate(
+                self.valid_loader):
+            # during validation, we do not need the noised configuration
+            I = configurations_without_noise.to(device=self.device)
+            real_O = angles.to(device=self.device)
+
+            predicted_o = self.generator(I)
+
+            self.current_real_angles[i * self.args.batch_size:
+                                     (i + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_angles[i * self.args.batch_size:
+                                          (i + 1) * self.args.batch_size, :] = predicted_o
