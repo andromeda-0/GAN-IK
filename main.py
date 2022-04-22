@@ -16,10 +16,10 @@ if __name__ == '__main__':
     parser.add_argument("--b2", type=float, default=0.999,
                         help="adam: decay of first order momentum of gradient")
     parser.add_argument('--data_path', default='data_7dof/data_txt.npz')
-    parser.add_argument('--generator', default='cGenerator_0')
-    parser.add_argument('--discriminator', default='cDiscriminator')
+    parser.add_argument('--generator', default='Generator_0')
+    parser.add_argument('--discriminator', default='Discriminator')
     parser.add_argument('--gpu_id', default=0, type=int)
-    parser.add_argument('--learning', default='cGAN')
+    parser.add_argument('--learning', default='GAN')
     parser.add_argument('--n_critic', default=5, type=int)
     args = parser.parse_args()
 

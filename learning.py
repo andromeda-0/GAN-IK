@@ -127,7 +127,7 @@ class Learning(ABC):
             self.writer.flush()
 
 
-class cGAN(Learning):
+class GAN(Learning):
     def __init__(self, args):
         super().__init__(args)
 
@@ -168,6 +168,7 @@ class cGAN(Learning):
             synthetic_i = torch.zeros((configurations.shape[0],) +
                                       self.train_set.configurations_shape()[1:])
             for channel in range(synthetic_i.shape[0]):
+                # TODO: change this to be about the minibatch
                 synthetic_i[channel, :] = torch.normal(self.mean, self.std)
             # clip from -pi to pi
             synthetic_i = torch.clip(synthetic_i, -torch.pi, torch.pi)
@@ -220,7 +221,7 @@ class cGAN(Learning):
                                           (i + 1) * self.args.batch_size, :] = predicted_o
 
 
-class cwGAN(Learning):
+class wGAN(Learning):
     def __init__(self, args):
         super().__init__(args)
 
@@ -256,6 +257,7 @@ class cwGAN(Learning):
             synthetic_i = torch.zeros((configurations.shape[0],) +
                                       self.train_set.configurations_shape()[1:])
             for channel in range(synthetic_i.shape[0]):
+                # TODO: change this to be about the minibatch
                 synthetic_i[channel, :] = torch.normal(self.mean, self.std)
             # clip from -pi to pi
             synthetic_i = torch.clip(synthetic_i, -torch.pi, torch.pi)
