@@ -360,3 +360,64 @@ class DiscriminativeModel(Learning):
                                      (i + 1) * self.args.batch_size, :] = real_O
             self.current_synthetic_angles[i * self.args.batch_size:
                                           (i + 1) * self.args.batch_size, :] = predicted_o
+
+
+class ssGAN(GAN):
+    def __init__(self, args):
+        super().__init__(args)
+        self.self_supervised_loss = nn.MSELoss()
+
+    def _train_epoch(self, epoch):
+        self.generator.train()
+        self.discriminator.train()
+        i = 0
+        g_loss_mean = 0
+        d_loss_mean = 0
+        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
+            # during training, we do not have access to noise-free configurations
+            I = configurations_no_noise.to(device=self.device)
+            O = angles.to(device=self.device)
+
+            valid = torch.ones((I.shape[0], 1), device=self.device)
+            fake = torch.zeros((I.shape[0], 1), device=self.device)
+
+            self.optimizer_G.zero_grad()
+
+            synthetic_i = self.get_synthetic_i(I)
+
+            # Generate a batch of images
+            synthetic_o = self.generator(synthetic_i)
+
+            synthetic_i_o = torch.cat([synthetic_i, synthetic_o], dim=1)
+
+            # Loss measures generator's ability to fool the discriminator
+            g_loss = self.adversarial_loss(self.discriminator(synthetic_i_o), valid)
+
+            g_loss.backward()
+            g_loss_mean += g_loss.item()
+            self.optimizer_G.step()
+
+            self.optimizer_D.zero_grad()
+
+            # Measure discriminator's ability to classify real from generated samples
+            alpha_samples = 2 * torch.rand(O.shape[0], 1) - 1
+            alpha_samples = alpha_samples.to(device=self.device)
+            interpolates_o = (alpha_samples * O + (1 - alpha_samples) * synthetic_o.detach())
+            interpolates_i = (alpha_samples * I + (1 - alpha_samples) * synthetic_i.detach())
+            g_estimates = [torch.cat([interpolates_i, interpolates_o], dim=1),
+                           torch.cat([I, O], dim=1),
+                           torch.cat([synthetic_i.detach(), synthetic_o.detach()], dim=1)]
+            g_targets = [alpha_samples, valid, fake]
+
+            d_loss = torch.zeros(1, device=self.device)
+            for estimator_i, target_i in zip(g_estimates, g_targets):
+                d_loss += self.self_supervised_loss(self.discriminator(estimator_i), target_i)
+
+            d_loss.backward()
+            d_loss_mean += d_loss.item()
+            self.optimizer_D.step()
+
+        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (i + 1), epoch)
+        self.writer.flush()
+        self.writer.add_scalar('Generator Loss', g_loss_mean / (i + 1), epoch)
+        self.writer.flush()
