@@ -93,6 +93,20 @@ class Learning(ABC):
         self.current_synthetic_angles = None
         self.current_real_angles = None
 
+    def get_synthetic_i(self, I):
+        if self.args.z_method == 'add':
+            synthetic_i = I + torch.normal(mean=torch.zeros_like(I), std=self.args.std).to(
+                    device=self.device)
+        elif self.args.z_method == 'minibatch':
+            synthetic_i = torch.normal(mean=I, std=torch.std(I)).to(device=self.device)
+        elif self.args.z_method == 'batch':
+            synthetic_i = torch.normal(mean=self.mean * torch.ones(I.shape),
+                                       std=self.std).to(device=self.device)
+        else:
+            raise ValueError()
+
+        return synthetic_i
+
     @staticmethod
     def metric(angles_1, angles_2):
         """
@@ -155,9 +169,9 @@ class GAN(Learning):
         i = 0
         g_loss_mean = 0
         d_loss_mean = 0
-        for i, (angles, configurations, _) in enumerate(self.train_loader):
+        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
             # during training, we do not have access to noise-free configurations
-            I = configurations.to(device=self.device)
+            I = configurations_no_noise.to(device=self.device)
             O = angles.to(device=self.device)
 
             valid = torch.ones((I.shape[0], 1), device=self.device)
@@ -165,15 +179,7 @@ class GAN(Learning):
 
             self.optimizer_G.zero_grad()
 
-            synthetic_i = torch.zeros((configurations.shape[0],) +
-                                      self.train_set.configurations_shape()[1:])
-            for channel in range(synthetic_i.shape[0]):
-                # TODO: change this to be about the minibatch
-                synthetic_i[channel, :] = torch.normal(self.mean, self.std)
-            # clip from -pi to pi
-            synthetic_i = torch.clip(synthetic_i, -torch.pi, torch.pi)
-
-            synthetic_i = synthetic_i.to(device=self.device)
+            synthetic_i = self.get_synthetic_i(I)
 
             # Generate a batch of images
             synthetic_o = self.generator(synthetic_i)
@@ -207,10 +213,10 @@ class GAN(Learning):
     def _validate_epoch(self, epoch):
         self.generator.eval()
         self.discriminator.eval()
-        for i, (angles, configurations, _) in enumerate(
+        for i, (angles, _, configurations_no_noise) in enumerate(
                 self.valid_loader):
             # during validation, we do not need the noised configuration
-            I = configurations.to(device=self.device)
+            I = configurations_no_noise.to(device=self.device)
             real_O = angles.to(device=self.device)
 
             predicted_o = self.generator(I)
@@ -247,21 +253,14 @@ class wGAN(Learning):
         g_loss_mean = 0
         d_loss_mean = 0
         i = 0
-        for i, (angles, configurations, _) in enumerate(self.train_loader):
+        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
             # during training, we do not have access to noise-free configurations
-            I = configurations.to(device=self.device)
+            I = configurations_no_noise.to(device=self.device)
             O = angles.to(device=self.device)
 
             self.optimizer_D.zero_grad()
 
-            synthetic_i = torch.zeros((configurations.shape[0],) +
-                                      self.train_set.configurations_shape()[1:])
-            for channel in range(synthetic_i.shape[0]):
-                # TODO: change this to be about the minibatch
-                synthetic_i[channel, :] = torch.normal(self.mean, self.std)
-            # clip from -pi to pi
-            synthetic_i = torch.clip(synthetic_i, -torch.pi, torch.pi)
-            synthetic_i = synthetic_i.to(device=self.device)
+            synthetic_i = self.get_synthetic_i(I)
 
             # Generate a batch of images
             synthetic_o = self.generator(synthetic_i)
@@ -293,10 +292,10 @@ class wGAN(Learning):
     def _validate_epoch(self, epoch):
         self.generator.eval()
         self.discriminator.eval()
-        for i, (angles, _, configurations_without_noise) in enumerate(
+        for i, (angles, _, configurations_no_noise) in enumerate(
                 self.valid_loader):
             # during validation, we do not need the noised configuration
-            I = configurations_without_noise.to(device=self.device)
+            I = configurations_no_noise.to(device=self.device)
             real_O = angles.to(device=self.device)
 
             predicted_o = self.generator(I)
@@ -327,8 +326,8 @@ class DiscriminativeModel(Learning):
         self.model.train()
         loss_mean = 0.0
         i = 0
-        for i, (angles, configurations, _) in enumerate(self.train_loader):
-            I = configurations.to(device=self.device)
+        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
+            I = configurations_no_noise.to(device=self.device)
             O = angles.to(device=self.device)
 
             self.optimizer.zero_grad()
@@ -349,10 +348,10 @@ class DiscriminativeModel(Learning):
 
     def _validate_epoch(self, epoch):
         self.model.eval()
-        for i, (angles, configurations, configurations_without_noise) in enumerate(
+        for i, (angles, _, configurations_without_noise) in enumerate(
                 self.valid_loader):
             # during validation, we do not need the noised configuration
-            I = configurations.to(device=self.device)
+            I = configurations_without_noise.to(device=self.device)
             real_O = angles.to(device=self.device)
 
             predicted_o = self.model(I)
