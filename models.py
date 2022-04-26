@@ -26,7 +26,6 @@ class Generator_0(Generator):
                 *self.block(256, 512),
                 *self.block(512, 1024),
                 nn.Linear(1024, o_dim),
-                nn.Tanh()
         )
 
     def forward(self, z):
@@ -42,7 +41,46 @@ class Generator_1(Generator):
                 *self.block(256, 256),
                 *self.block(256, 256),
                 nn.Linear(256, self.o_dim),
-                nn.Tanh()
+        )
+
+    def forward(self, z):
+        return self.model(z)
+
+
+class Generator_2(Generator):
+    def __init__(self, i_dim, o_dim):
+        super().__init__(i_dim, o_dim)
+
+        self.model = nn.Sequential(
+                nn.Linear(self.i_dim, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, self.o_dim)
+        )
+
+    def forward(self, z):
+        return self.model(z)
+
+
+class Generator_3(Generator):
+    def __init__(self, i_dim, o_dim):
+        super().__init__(i_dim, o_dim)
+
+        self.model = nn.Sequential(
+                nn.Linear(self.i_dim, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(0.1),
+                nn.Linear(256, self.o_dim)
         )
 
     def forward(self, z):

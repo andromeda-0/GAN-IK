@@ -58,7 +58,7 @@ class DynamicsSet(KDCSet):
         super().__init__(data_path)
         data = loadmat(self.data_path)
         i = np.concatenate([data['thetas'][:, 10000:90000], data['thetaDotss'][:, 10000:90000],
-                            data['thetaDDotss']][:, 10000:90000], axis=0).transpose()
+                            data['thetaDDotss'][:, 10000:90000]], axis=0).transpose()
         o = data['torques'][:, 10000:90000].transpose()
 
         self.len = o.shape[0]
@@ -184,7 +184,6 @@ class GAN(Learning):
         g_loss_mean = 0
         d_loss_mean = 0
         for index, (o, i) in enumerate(self.train_loader):
-            # during training, we do not have access to noise-free i
             I = i.to(device=self.device)
             O = o.to(device=self.device)
 
@@ -268,7 +267,7 @@ class wGAN(Learning):
         d_loss_mean = 0
         index = 0
         for index, (o, i) in enumerate(self.train_loader):
-            # during training, we do not have access to noise-free i
+
             I = i.to(device=self.device)
             O = o.to(device=self.device)
 
@@ -388,7 +387,6 @@ class ssGAN(GAN):
         g_loss_mean = 0
         d_loss_mean = 0
         for index, (o, i) in enumerate(self.train_loader):
-            # during training, we do not have access to noise-free i
             I = i.to(device=self.device)
             O = o.to(device=self.device)
 
