@@ -136,7 +136,10 @@ class Learning(ABC):
         rmse = np.array(rmse[-50:])
         self.writer.add_scalar('Valid/Steady-RMSE-Mean', rmse.mean())
         self.writer.add_scalar('Valid/Steady-RMSE-Std', rmse.std())
-        print(str(self.args).replace(' ', '') + ' mean: %.2f std: %.2f' % (rmse.mean(), rmse.std()))
+
+        data_string = ','.join([self.args.data_path, self.args.learning, self.args.z_method])
+        with open('results/' + self.config_string + '.csv', 'w') as f:
+            f.write(data_string + ',%.4f,%.4f' % (rmse.mean(), rmse.std()))
         self.writer.close()
 
     def valid(self, epoch):
