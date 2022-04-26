@@ -158,6 +158,8 @@ class Learning(ABC):
         self.writer.add_scalar('Valid/Steady-RMSE-Std', rmse.std())
 
         data_string = ','.join([self.args.data_path, self.args.learning, self.args.z_method])
+        if not os.path.exists('results/'):
+            os.mkdir('results')
         with open('results/' + self.config_string + '.csv', 'w') as f:
             f.write(data_string + ',%.4f,%.4f' % (rmse.mean(), rmse.std()))
         self.writer.close()
