@@ -32,7 +32,7 @@ class KDCSet(Dataset):
         return mu, sigma
 
     def __getitem__(self, index):
-        return (self.o[index], None, self.i[index])
+        return (self.o[index], self.i[index])
 
     def __len__(self):
         return self.len
@@ -79,7 +79,7 @@ class Learning(ABC):
         with open('configs/%s.json' % self.config_string, 'w') as f:
             json.dump(vars(args), f)
         self.device = torch.device('cuda:%d' % args.gpu_id)
-        dataset: KDCSet = eval(args.dataset + '(%s)' % args.data_path)
+        dataset: KDCSet = eval(args.dataset + '("' + args.data_path + '")')
         random_indices = np.random.permutation(np.arange(len(dataset)))
         self.train_set = Subset(dataset, random_indices[0:int(0.8 * len(dataset))])
         self.valid_set = Subset(dataset, random_indices[int(0.8 * len(dataset)):])
@@ -177,12 +177,12 @@ class GAN(Learning):
     def _train_epoch(self, epoch):
         self.generator.train()
         self.discriminator.train()
-        i = 0
+        index = 0
         g_loss_mean = 0
         d_loss_mean = 0
-        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
+        for index, (o, i) in enumerate(self.train_loader):
             # during training, we do not have access to noise-free i
-            I = i_no_noise.to(device=self.device)
+            I = i.to(device=self.device)
             O = o.to(device=self.device)
 
             valid = torch.ones((I.shape[0], 1), device=self.device)
@@ -216,26 +216,26 @@ class GAN(Learning):
             d_loss_mean += d_loss.item()
             self.optimizer_D.step()
 
-        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (i + 1), epoch)
+        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (index + 1), epoch)
         self.writer.flush()
-        self.writer.add_scalar('Generator Loss', g_loss_mean / (i + 1), epoch)
+        self.writer.add_scalar('Generator Loss', g_loss_mean / (index + 1), epoch)
         self.writer.flush()
 
     def _validate_epoch(self, epoch):
         self.generator.eval()
         self.discriminator.eval()
-        for i, (o, _, i_no_noise) in enumerate(
+        for index, (o, i) in enumerate(
                 self.valid_loader):
             # during validation, we do not need the noised i
-            I = i_no_noise.to(device=self.device)
+            I = i.to(device=self.device)
             real_O = o.to(device=self.device)
 
             predicted_o = self.generator(I)
 
-            self.current_real_o[i * self.args.batch_size:
-                                (i + 1) * self.args.batch_size, :] = real_O
-            self.current_synthetic_o[i * self.args.batch_size:
-                                     (i + 1) * self.args.batch_size, :] = predicted_o
+            self.current_real_o[index * self.args.batch_size:
+                                (index + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_o[index * self.args.batch_size:
+                                     (index + 1) * self.args.batch_size, :] = predicted_o
 
 
 class wGAN(Learning):
@@ -263,10 +263,10 @@ class wGAN(Learning):
         self.discriminator.train()
         g_loss_mean = 0
         d_loss_mean = 0
-        i = 0
-        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
+        index = 0
+        for index, (o, i) in enumerate(self.train_loader):
             # during training, we do not have access to noise-free i
-            I = i_no_noise.to(device=self.device)
+            I = i.to(device=self.device)
             O = o.to(device=self.device)
 
             self.optimizer_D.zero_grad()
@@ -285,7 +285,7 @@ class wGAN(Learning):
             self.optimizer_D.step()
             d_loss_mean += d_loss.item()
 
-            if i % self.args.n_critic == 0:
+            if index % self.args.n_critic == 0:
                 self.optimizer_G.zero_grad()
                 synthetic_o = self.generator(synthetic_i)
                 synthetic_i_o = torch.cat([synthetic_i, synthetic_o], dim=1)
@@ -294,27 +294,27 @@ class wGAN(Learning):
                 self.optimizer_G.step()
                 g_loss_mean += g_loss.item()
 
-        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (i + 1), epoch)
+        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (index + 1), epoch)
         self.writer.flush()
         self.writer.add_scalar('Generator Loss',
-                               g_loss_mean / (i + 1) * self.args.n_critic, epoch)
+                               g_loss_mean / (index + 1) * self.args.n_critic, epoch)
         self.writer.flush()
 
     def _validate_epoch(self, epoch):
         self.generator.eval()
         self.discriminator.eval()
-        for i, (o, _, i_no_noise) in enumerate(
+        for index, (o, i) in enumerate(
                 self.valid_loader):
             # during validation, we do not need the noised i
-            I = i_no_noise.to(device=self.device)
+            I = i.to(device=self.device)
             real_O = o.to(device=self.device)
 
             predicted_o = self.generator(I)
 
-            self.current_real_o[i * self.args.batch_size:
-                                (i + 1) * self.args.batch_size, :] = real_O
-            self.current_synthetic_o[i * self.args.batch_size:
-                                     (i + 1) * self.args.batch_size, :] = predicted_o
+            self.current_real_o[index * self.args.batch_size:
+                                (index + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_o[index * self.args.batch_size:
+                                     (index + 1) * self.args.batch_size, :] = predicted_o
 
 
 class DiscriminativeModel(Learning):
@@ -336,9 +336,9 @@ class DiscriminativeModel(Learning):
     def _train_epoch(self, epoch):
         self.model.train()
         loss_mean = 0.0
-        i = 0
-        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
-            I = i_no_noise.to(device=self.device)
+        index = 0
+        for index, (o, i) in enumerate(self.train_loader):
+            I = i.to(device=self.device)
             O = o.to(device=self.device)
 
             self.optimizer.zero_grad()
@@ -354,23 +354,23 @@ class DiscriminativeModel(Learning):
 
             loss_mean += loss.item()
 
-        self.writer.add_scalar('Discriminator Loss', loss_mean / (i + 1), epoch)
+        self.writer.add_scalar('Discriminator Loss', loss_mean / (index + 1), epoch)
         self.writer.flush()
 
     def _validate_epoch(self, epoch):
         self.model.eval()
-        for i, (o, _, i_without_noise) in enumerate(
+        for index, (o, i) in enumerate(
                 self.valid_loader):
             # during validation, we do not need the noised i
-            I = i_without_noise.to(device=self.device)
+            I = i.to(device=self.device)
             real_O = o.to(device=self.device)
 
             predicted_o = self.model(I)
 
-            self.current_real_o[i * self.args.batch_size:
-                                (i + 1) * self.args.batch_size, :] = real_O
-            self.current_synthetic_o[i * self.args.batch_size:
-                                     (i + 1) * self.args.batch_size, :] = predicted_o
+            self.current_real_o[index * self.args.batch_size:
+                                (index + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_o[index * self.args.batch_size:
+                                     (index + 1) * self.args.batch_size, :] = predicted_o
 
 
 class ssGAN(GAN):
@@ -381,12 +381,12 @@ class ssGAN(GAN):
     def _train_epoch(self, epoch):
         self.generator.train()
         self.discriminator.train()
-        i = 0
+        index = 0
         g_loss_mean = 0
         d_loss_mean = 0
-        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
+        for index, (o, i) in enumerate(self.train_loader):
             # during training, we do not have access to noise-free i
-            I = i_no_noise.to(device=self.device)
+            I = i.to(device=self.device)
             O = o.to(device=self.device)
 
             valid = torch.ones((I.shape[0], 1), device=self.device)
@@ -428,7 +428,7 @@ class ssGAN(GAN):
             d_loss_mean += d_loss.item()
             self.optimizer_D.step()
 
-        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (i + 1), epoch)
+        self.writer.add_scalar('Discriminator Loss', d_loss_mean / (index + 1), epoch)
         self.writer.flush()
-        self.writer.add_scalar('Generator Loss', g_loss_mean / (i + 1), epoch)
+        self.writer.add_scalar('Generator Loss', g_loss_mean / (index + 1), epoch)
         self.writer.flush()
