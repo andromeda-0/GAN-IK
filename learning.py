@@ -1,3 +1,4 @@
+import dataclasses
 import hashlib
 import json
 import os
@@ -6,13 +7,31 @@ from abc import ABC, abstractmethod
 import numpy as np
 import torch
 import torch.nn.functional as functional
+from scipy.io import loadmat
 from torch.utils.data import DataLoader, Dataset, Subset
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-from scipy.io import loadmat
 
 # noinspection PyUnresolvedReferences
 from models import *
+
+
+@dataclasses.dataclass
+class Params:
+    n_epochs: int = 200
+    batch_size: int = 64
+    lr_g: float = 2e-4
+    lr_d: float = 2e-4
+    b1: float = 0.5
+    b2: float = 0.999
+    data_path: str = 'data_7dof/data_txt.npz'
+    generator: str = 'Generator_1'
+    discriminator: str = 'Discriminator'
+    gpu_id: int = 0
+    learning: str = 'GAN'
+    n_critic: int = 5
+    std: float = 0.1
+    z_method: str = 'add'
+    dataset: str = 'KinematicsSet'
 
 
 class KDCSet(Dataset):
@@ -130,7 +149,7 @@ class Learning(ABC):
 
     def train(self):
         rmse = []
-        for epoch in tqdm(range(self.args.n_epochs)):
+        for epoch in range(self.args.n_epochs):
             self._train_epoch(epoch)
             rmse.append(self.valid(epoch))
         rmse = np.array(rmse[-50:])
