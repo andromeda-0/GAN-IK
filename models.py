@@ -2,10 +2,10 @@ import torch.nn as nn
 
 
 class Generator(nn.Module):
-    def __init__(self, config_dim, angle_dim):
+    def __init__(self, i_dim, o_dim):
         super(Generator, self).__init__()
-        self.config_dim = config_dim
-        self.angle_dim = angle_dim
+        self.i_dim = i_dim
+        self.o_dim = o_dim
 
     @staticmethod
     def block(in_feat, out_feat, normalize=True):
@@ -17,15 +17,15 @@ class Generator(nn.Module):
 
 
 class Generator_0(Generator):
-    def __init__(self, config_dim, angle_dim):
-        super().__init__(config_dim, angle_dim)
+    def __init__(self, i_dim, o_dim):
+        super().__init__(i_dim, o_dim)
 
         self.model = nn.Sequential(
-                *self.block(config_dim, 128, normalize=False),
+                *self.block(i_dim, 128, normalize=False),
                 *self.block(128, 256),
                 *self.block(256, 512),
                 *self.block(512, 1024),
-                nn.Linear(1024, angle_dim),
+                nn.Linear(1024, o_dim),
                 nn.Tanh()
         )
 
@@ -34,14 +34,14 @@ class Generator_0(Generator):
 
 
 class Generator_1(Generator):
-    def __init__(self, config_dim, angle_dim):
-        super().__init__(config_dim, angle_dim)
+    def __init__(self, i_dim, o_dim):
+        super().__init__(i_dim, o_dim)
 
         self.model = nn.Sequential(
-                *self.block(self.config_dim, 256, normalize=False),
+                *self.block(self.i_dim, 256, normalize=False),
                 *self.block(256, 256),
                 *self.block(256, 256),
-                nn.Linear(256, self.angle_dim),
+                nn.Linear(256, self.o_dim),
                 nn.Tanh()
         )
 
@@ -69,10 +69,10 @@ class Discriminator(nn.Module):
 
 
 class Dense(nn.Module):
-    def __init__(self, config_dim, angle_dim):
+    def __init__(self, i_dim, o_dim):
         super().__init__()
         self.model = nn.Sequential(
-                nn.Linear(config_dim, 32),
+                nn.Linear(i_dim, 32),
                 nn.ReLU(),
                 nn.Dropout(0.2),
                 nn.Linear(32, 128),
@@ -84,7 +84,7 @@ class Dense(nn.Module):
                 nn.Linear(256, 64),
                 nn.ReLU(),
                 nn.Dropout(0.2),
-                nn.Linear(64, angle_dim)
+                nn.Linear(64, o_dim)
         )
 
     def forward(self, x):

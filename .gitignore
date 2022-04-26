@@ -6,5 +6,6 @@
 *.iml
 out
 gen
-runs
-configs
+/**/results*/
+/**/runs*/
+/**/configs*/

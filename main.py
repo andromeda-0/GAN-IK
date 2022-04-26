@@ -23,6 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_critic', default=5, type=int)
     parser.add_argument('--std', default=0.1, type=float)
     parser.add_argument('--z_method', default='add', help='add | minibatch | batch')
+    parser.add_argument('--dataset', default='KinematicsSet')
     args = parser.parse_args()
 
     learning = eval(args.learning + '(args)')

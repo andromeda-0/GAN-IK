@@ -2,67 +2,71 @@ import hashlib
 import json
 import os
 from abc import ABC, abstractmethod
-from typing import Sequence
 
 import numpy as np
 import torch
 import torch.nn.functional as functional
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+from scipy.io import loadmat
 
 # noinspection PyUnresolvedReferences
 from models import *
 
 
-class KinematicsSet(Dataset):
+class KDCSet(Dataset):
     def __init__(self, data_path):
-        data = np.load(data_path)
-        angles = data['angles']
-        configurations = data['configurations']
+        self.data_path = data_path
+        self.i = None
+        self.o = None
+        self.len = None
 
-        self.len = angles.shape[0]
-        self.config_dim = configurations.shape[1]
-        self.angle_dim = angles.shape[1]
-
-        self.angles = torch.tensor(angles, dtype=torch.float)
-        self.configurations = torch.tensor(configurations, dtype=torch.float)
-        self.configurations_without_noise = torch.tensor(data['configurations_without_noise'],
-                                                         dtype=torch.float)
+    def mean_std_i(self):
+        """
+        The mean and variance of the i
+        :return:
+        """
+        mu = torch.mean(self.i, 0)
+        sigma = torch.std(self.i, 0)
+        return mu, sigma
 
     def __getitem__(self, index):
-        return (self.angles[index], self.configurations[index],
-                self.configurations_without_noise[index])
+        return (self.o[index], None, self.i[index])
 
     def __len__(self):
         return self.len
 
-    def mean_std_config(self):
-        """
-        The mean and variance of the configurations
-        :return:
-        """
-        mu = torch.mean(self.configurations, 0)
-        sigma = torch.std(self.configurations, 0)
-        return mu, sigma
+
+class KinematicsSet(KDCSet):
+    def __init__(self, data_path):
+        super(KinematicsSet, self).__init__(data_path)
+        data = np.load(self.data_path)
+        o = data['angles']
+        i = data['configurations_without_noise']
+
+        self.len = o.shape[0]
+        self.i_dim = i.shape[1]
+        self.o_dim = o.shape[1]
+
+        self.o = torch.tensor(o, dtype=torch.float)
+        self.i = torch.tensor(i, dtype=torch.float)
 
 
-class KinematicsSubset(Dataset):
-    def __init__(self, dataset: KinematicsSet, indices: Sequence[int]) -> None:
-        self.dataset = dataset
-        self.indices = indices
+class DynamicsSet(KDCSet):
+    def __init__(self, data_path):
+        super().__init__(data_path)
+        data = loadmat(self.data_path)
+        i = np.concatenate([data['thetas'][:, 10000:90000], data['thetaDotss'][:, 10000:90000],
+                            data['thetaDDotss']][:, 10000:90000], axis=0).transpose()
+        o = data['torques'][:, 10000:90000].transpose()
 
-    def configurations_shape(self):
-        return (self.__len__(),) + self.dataset.configurations.shape[1:]
+        self.len = o.shape[0]
+        self.i_dim = i.shape[1]
+        self.o_dim = o.shape[1]
 
-    def angles_shape(self):
-        return (self.__len__(),) + self.dataset.angles.shape[1:]
-
-    def __getitem__(self, index):
-        return self.dataset.__getitem__(self.indices[index])
-
-    def __len__(self):
-        return len(self.indices)
+        self.o = torch.tensor(o, dtype=torch.float)
+        self.i = torch.tensor(i, dtype=torch.float)
 
 
 class Learning(ABC):
@@ -75,10 +79,10 @@ class Learning(ABC):
         with open('configs/%s.json' % self.config_string, 'w') as f:
             json.dump(vars(args), f)
         self.device = torch.device('cuda:%d' % args.gpu_id)
-        dataset = KinematicsSet(args.data_path)
+        dataset: KDCSet = eval(args.dataset + '(%s)' % args.data_path)
         random_indices = np.random.permutation(np.arange(len(dataset)))
-        self.train_set = KinematicsSubset(dataset, random_indices[0:int(0.8 * len(dataset))])
-        self.valid_set = KinematicsSubset(dataset, random_indices[int(0.8 * len(dataset)):])
+        self.train_set = Subset(dataset, random_indices[0:int(0.8 * len(dataset))])
+        self.valid_set = Subset(dataset, random_indices[int(0.8 * len(dataset)):])
 
         self.train_loader = DataLoader(
                 self.train_set,
@@ -89,9 +93,9 @@ class Learning(ABC):
         self.valid_loader = DataLoader(self.valid_set, batch_size=args.batch_size, shuffle=False)
 
         self.writer = SummaryWriter('runs/' + self.config_string)
-        self.mean, self.std = self.train_set.dataset.mean_std_config()
-        self.current_synthetic_angles = None
-        self.current_real_angles = None
+        self.mean, self.std = self.train_set.dataset.mean_std_i()
+        self.current_synthetic_o = None
+        self.current_real_o = None
 
     def get_synthetic_i(self, I):
         if self.args.z_method == 'add':
@@ -108,13 +112,13 @@ class Learning(ABC):
         return synthetic_i
 
     @staticmethod
-    def metric(angles_1, angles_2):
+    def metric(o_1, o_2):
         """
-        As we are solving the IK problem, we need to compare the real angles and synthetic angles
+        As we are solving the IK problem, we need to compare the real o and synthetic o
         :return:
         """
 
-        return torch.sqrt(functional.mse_loss(angles_1, angles_2)).detach().cpu().item()
+        return torch.sqrt(functional.mse_loss(o_1, o_2)).detach().cpu().item()
 
     @abstractmethod
     def _train_epoch(self, epoch):
@@ -125,20 +129,27 @@ class Learning(ABC):
         pass
 
     def train(self):
+        rmse = []
         for epoch in tqdm(range(self.args.n_epochs)):
             self._train_epoch(epoch)
-            self.valid(epoch)
+            rmse.append(self.valid(epoch))
+        rmse = np.array(rmse[-50:])
+        self.writer.add_scalar('Valid/Steady-RMSE-Mean', rmse.mean())
+        self.writer.add_scalar('Valid/Steady-RMSE-Std', rmse.std())
+        print(str(self.args).replace(' ', '') + ' mean: %.2f std: %.2f' % (rmse.mean(), rmse.std()))
         self.writer.close()
 
     def valid(self, epoch):
         with torch.no_grad():
-            self.current_real_angles = torch.zeros(self.valid_set.angles_shape(),
-                                                   device=self.device)
-            self.current_synthetic_angles = torch.zeros_like(self.current_real_angles)
+            self.current_real_o = torch.zeros(
+                    (len(self.valid_set),) + self.valid_set.dataset.o.shape[1:],
+                    device=self.device)
+            self.current_synthetic_o = torch.zeros_like(self.current_real_o)
             self._validate_epoch(epoch)
-            rmse_ik = self.metric(self.current_real_angles, self.current_synthetic_angles)
+            rmse_ik = self.metric(self.current_real_o, self.current_synthetic_o)
             self.writer.add_scalar('Valid/RMSE', rmse_ik, global_step=epoch)
             self.writer.flush()
+        return rmse_ik
 
 
 class GAN(Learning):
@@ -147,11 +158,11 @@ class GAN(Learning):
 
         self.adversarial_loss = torch.nn.BCELoss()
         self.generator: nn.Module = eval(
-                args.generator + '(self.train_set.dataset.config_dim,'
-                                 ' self.train_set.dataset.angle_dim)')
+                args.generator + '(self.train_set.dataset.i_dim,'
+                                 ' self.train_set.dataset.o_dim)')
         self.discriminator: nn.Module = eval(
-                args.discriminator + '(self.train_set.dataset.config_dim'
-                                     ' + self.train_set.dataset.angle_dim)')
+                args.discriminator + '(self.train_set.dataset.i_dim'
+                                     ' + self.train_set.dataset.o_dim)')
 
         self.generator.to(self.device)
         self.discriminator.to(self.device)
@@ -169,10 +180,10 @@ class GAN(Learning):
         i = 0
         g_loss_mean = 0
         d_loss_mean = 0
-        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
-            # during training, we do not have access to noise-free configurations
-            I = configurations_no_noise.to(device=self.device)
-            O = angles.to(device=self.device)
+        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
+            # during training, we do not have access to noise-free i
+            I = i_no_noise.to(device=self.device)
+            O = o.to(device=self.device)
 
             valid = torch.ones((I.shape[0], 1), device=self.device)
             fake = torch.zeros((I.shape[0], 1), device=self.device)
@@ -213,18 +224,18 @@ class GAN(Learning):
     def _validate_epoch(self, epoch):
         self.generator.eval()
         self.discriminator.eval()
-        for i, (angles, _, configurations_no_noise) in enumerate(
+        for i, (o, _, i_no_noise) in enumerate(
                 self.valid_loader):
-            # during validation, we do not need the noised configuration
-            I = configurations_no_noise.to(device=self.device)
-            real_O = angles.to(device=self.device)
+            # during validation, we do not need the noised i
+            I = i_no_noise.to(device=self.device)
+            real_O = o.to(device=self.device)
 
             predicted_o = self.generator(I)
 
-            self.current_real_angles[i * self.args.batch_size:
-                                     (i + 1) * self.args.batch_size, :] = real_O
-            self.current_synthetic_angles[i * self.args.batch_size:
-                                          (i + 1) * self.args.batch_size, :] = predicted_o
+            self.current_real_o[i * self.args.batch_size:
+                                (i + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_o[i * self.args.batch_size:
+                                     (i + 1) * self.args.batch_size, :] = predicted_o
 
 
 class wGAN(Learning):
@@ -232,11 +243,11 @@ class wGAN(Learning):
         super().__init__(args)
 
         self.generator: nn.Module = eval(
-                args.generator + '(self.train_set.dataset.config_dim,'
-                                 ' self.train_set.dataset.angle_dim)')
+                args.generator + '(self.train_set.dataset.i_dim,'
+                                 ' self.train_set.dataset.o_dim)')
         self.discriminator: nn.Module = eval(
-                args.discriminator + '(self.train_set.dataset.config_dim'
-                                     ' + self.train_set.dataset.angle_dim)')
+                args.discriminator + '(self.train_set.dataset.i_dim'
+                                     ' + self.train_set.dataset.o_dim)')
 
         self.generator.to(self.device)
         self.discriminator.to(self.device)
@@ -253,10 +264,10 @@ class wGAN(Learning):
         g_loss_mean = 0
         d_loss_mean = 0
         i = 0
-        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
-            # during training, we do not have access to noise-free configurations
-            I = configurations_no_noise.to(device=self.device)
-            O = angles.to(device=self.device)
+        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
+            # during training, we do not have access to noise-free i
+            I = i_no_noise.to(device=self.device)
+            O = o.to(device=self.device)
 
             self.optimizer_D.zero_grad()
 
@@ -292,18 +303,18 @@ class wGAN(Learning):
     def _validate_epoch(self, epoch):
         self.generator.eval()
         self.discriminator.eval()
-        for i, (angles, _, configurations_no_noise) in enumerate(
+        for i, (o, _, i_no_noise) in enumerate(
                 self.valid_loader):
-            # during validation, we do not need the noised configuration
-            I = configurations_no_noise.to(device=self.device)
-            real_O = angles.to(device=self.device)
+            # during validation, we do not need the noised i
+            I = i_no_noise.to(device=self.device)
+            real_O = o.to(device=self.device)
 
             predicted_o = self.generator(I)
 
-            self.current_real_angles[i * self.args.batch_size:
-                                     (i + 1) * self.args.batch_size, :] = real_O
-            self.current_synthetic_angles[i * self.args.batch_size:
-                                          (i + 1) * self.args.batch_size, :] = predicted_o
+            self.current_real_o[i * self.args.batch_size:
+                                (i + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_o[i * self.args.batch_size:
+                                     (i + 1) * self.args.batch_size, :] = predicted_o
 
 
 class DiscriminativeModel(Learning):
@@ -312,8 +323,8 @@ class DiscriminativeModel(Learning):
 
         self.loss = torch.nn.MSELoss()
         self.model: nn.Module = eval(
-                args.discriminator + '(self.train_set.dataset.config_dim,'
-                                     ' self.train_set.dataset.angle_dim)')
+                args.discriminator + '(self.train_set.dataset.i_dim,'
+                                     ' self.train_set.dataset.o_dim)')
 
         self.model.to(self.device)
         self.loss.to(self.device)
@@ -326,9 +337,9 @@ class DiscriminativeModel(Learning):
         self.model.train()
         loss_mean = 0.0
         i = 0
-        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
-            I = configurations_no_noise.to(device=self.device)
-            O = angles.to(device=self.device)
+        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
+            I = i_no_noise.to(device=self.device)
+            O = o.to(device=self.device)
 
             self.optimizer.zero_grad()
 
@@ -348,18 +359,18 @@ class DiscriminativeModel(Learning):
 
     def _validate_epoch(self, epoch):
         self.model.eval()
-        for i, (angles, _, configurations_without_noise) in enumerate(
+        for i, (o, _, i_without_noise) in enumerate(
                 self.valid_loader):
-            # during validation, we do not need the noised configuration
-            I = configurations_without_noise.to(device=self.device)
-            real_O = angles.to(device=self.device)
+            # during validation, we do not need the noised i
+            I = i_without_noise.to(device=self.device)
+            real_O = o.to(device=self.device)
 
             predicted_o = self.model(I)
 
-            self.current_real_angles[i * self.args.batch_size:
-                                     (i + 1) * self.args.batch_size, :] = real_O
-            self.current_synthetic_angles[i * self.args.batch_size:
-                                          (i + 1) * self.args.batch_size, :] = predicted_o
+            self.current_real_o[i * self.args.batch_size:
+                                (i + 1) * self.args.batch_size, :] = real_O
+            self.current_synthetic_o[i * self.args.batch_size:
+                                     (i + 1) * self.args.batch_size, :] = predicted_o
 
 
 class ssGAN(GAN):
@@ -373,10 +384,10 @@ class ssGAN(GAN):
         i = 0
         g_loss_mean = 0
         d_loss_mean = 0
-        for i, (angles, _, configurations_no_noise) in enumerate(self.train_loader):
-            # during training, we do not have access to noise-free configurations
-            I = configurations_no_noise.to(device=self.device)
-            O = angles.to(device=self.device)
+        for i, (o, _, i_no_noise) in enumerate(self.train_loader):
+            # during training, we do not have access to noise-free i
+            I = i_no_noise.to(device=self.device)
+            O = o.to(device=self.device)
 
             valid = torch.ones((I.shape[0], 1), device=self.device)
             fake = torch.zeros((I.shape[0], 1), device=self.device)
