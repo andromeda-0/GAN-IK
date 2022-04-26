@@ -92,7 +92,8 @@ class Learning(ABC):
     def __init__(self, args):
         self.args = args
         run_id = str(vars(args))
-        self.config_string = hashlib.md5(run_id.encode('utf-8')).hexdigest()
+        self.config_string = args.data_path.replace('/', '-') + hashlib.md5(
+            run_id.encode('utf-8')).hexdigest()
         if not os.path.exists('configs/'):
             os.mkdir('configs')
         with open('configs/%s.json' % self.config_string, 'w') as f:

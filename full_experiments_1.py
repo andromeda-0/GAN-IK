@@ -13,7 +13,7 @@ def test(args):
 
 
 if __name__ == '__main__':
-    pool = multiprocessing.Pool(3)
+    pool = multiprocessing.Pool(4)
     for learning in ['GAN', 'wGAN', 'ssGAN']:
         for z_method in ['add', 'mini_batch', 'batch']:
             for generator in ['Generator_1', 'Generator_2', 'Generator_3']:
