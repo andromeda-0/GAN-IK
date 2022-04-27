@@ -85,4 +85,4 @@ if __name__ == '__main__':
     # prepare_data('data_7dof/data_random_with_noise.npz', o=o, noise=noise)
 
     o = rng.random(size=(5000, 7)) * np.pi * 2 - np.pi  # -pi to pi
-    prepare_data_cartesian('data_7dof/data_cart_without_noise.npz', o=o)
+    prepare_data_cartesian('data_cart_without_noise.npz', o=o)
