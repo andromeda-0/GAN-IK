@@ -5,6 +5,7 @@ import os
 from abc import ABC, abstractmethod
 
 import numpy as np
+import scipy.io
 import torch
 import torch.nn.functional as functional
 from scipy.io import loadmat
@@ -72,6 +73,21 @@ class KinematicsSet(KDCSet):
         self.i = torch.tensor(i, dtype=torch.float)
 
 
+class KinematicsSetN(KDCSet):
+    def __init__(self, data_path):
+        super().__init__(data_path)
+        data = scipy.io.loadmat(self.data_path)
+        o = data['angles'][:, 10000:90000].transpose()
+        i = data['configuration'][:, 10000:90000].transpose()
+
+        self.len = o.shape[0]
+        self.i_dim = i.shape[1]
+        self.o_dim = o.shape[1]
+
+        self.o = torch.tensor(o, dtype=torch.float)
+        self.i = torch.tensor(i, dtype=torch.float)
+
+
 class DynamicsSet(KDCSet):
     def __init__(self, data_path):
         super().__init__(data_path)
@@ -93,7 +109,7 @@ class Learning(ABC):
         self.args = args
         run_id = str(vars(args))
         self.config_string = args.data_path.replace('/', '-') + hashlib.md5(
-            run_id.encode('utf-8')).hexdigest()
+                run_id.encode('utf-8')).hexdigest()
         if not os.path.exists('configs/'):
             os.mkdir('configs')
         with open('configs/%s.json' % self.config_string, 'w') as f:
