@@ -3,9 +3,3 @@
 
 # IntelliJ project files
 .idea
-*.iml
-out
-gen
-/**/results*/
-/**/runs*/
-/**/configs*/
