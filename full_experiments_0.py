@@ -20,8 +20,8 @@ def test(args):
 if __name__ == '__main__':
     pool = multiprocessing.Pool(2)
     for learning in ['GAN', 'wGAN']:
-        for z_method in ['add', 'mini_batch', 'batch']:
-            for generator in ['Generator_1', 'Generator_2', 'Generator_3']:
+        for z_method in ['add', 'minibatch', 'batch']:
+            for generator in ['Generator_3']:
                 arg_d = Params(learning=learning, z_method=z_method, generator=generator,
                                data_path='data_3dof/SomeVars3.mat',
                                dataset='DynamicsSet',
