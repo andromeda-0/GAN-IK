@@ -1,0 +1,1 @@
+{"n_epochs": 200, "batch_size": 64, "lr_g": 0.0002, "lr_d": 0.0002, "b1": 0.5, "b2": 0.999, "data_path": "data_3dof/SomeVars3.mat", "generator": "Generator_3", "discriminator": "Discriminator", "gpu_id": 0, "learning": "ssGAN", "n_critic": 5, "std": 0.1, "z_method": "batch", "dataset": "DynamicsSet"}
