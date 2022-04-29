@@ -88,7 +88,56 @@ class KinematicsSetN(KDCSet):
         self.i = torch.tensor(i, dtype=torch.float)
 
 
+class KinematicsSetN_Normalized(KDCSet):
+    def __init__(self, data_path):
+        super().__init__(data_path)
+        data = scipy.io.loadmat(self.data_path)
+        o = data['angles'][:, 10000:90000].transpose()
+        i = data['configuration'][:, 10000:90000].transpose()
+
+        self.len = o.shape[0]
+        self.i_dim = i.shape[1]
+        self.o_dim = o.shape[1]
+
+        self.o = torch.tensor(o, dtype=torch.float)
+        self.i = torch.tensor(i, dtype=torch.float)
+
+        self.o_mean = torch.mean(self.o, dim=0)
+        self.o_std = torch.std(self.o, dim=0)
+
+        self.i_mean = torch.mean(self.i, dim=0)
+        self.i_std = torch.std(self.i, dim=0)
+
+        self.o = (self.o - self.o_mean) / self.o_std
+        self.i = (self.i - self.i_mean) / self.i_std
+
+
 class DynamicsSet(KDCSet):
+    def __init__(self, data_path):
+        super().__init__(data_path)
+        data = loadmat(self.data_path)
+        i = np.concatenate([data['thetas'][:, 10000:90000], data['thetaDotss'][:, 10000:90000],
+                            data['thetaDDotss'][:, 10000:90000]], axis=0).transpose()
+        o = data['torques'][:, 10000:90000].transpose()
+
+        self.len = o.shape[0]
+        self.i_dim = i.shape[1]
+        self.o_dim = o.shape[1]
+
+        self.o = torch.tensor(o, dtype=torch.float)
+        self.i = torch.tensor(i, dtype=torch.float)
+
+        self.o_mean = torch.mean(self.o, dim=0)
+        self.o_std = torch.std(self.o, dim=0)
+
+        self.i_mean = torch.mean(self.i, dim=0)
+        self.i_std = torch.std(self.i, dim=0)
+
+        self.o = (self.o - self.o_mean) / self.o_std
+        self.i = (self.i - self.i_mean) / self.i_std
+
+
+class DynamicsSet_Normalized(KDCSet):
     def __init__(self, data_path):
         super().__init__(data_path)
         data = loadmat(self.data_path)
@@ -147,14 +196,20 @@ class Learning(ABC):
 
         return synthetic_i
 
-    @staticmethod
-    def metric(o_1, o_2):
+    def metric(self, o_1, o_2):
         """
         As we are solving the IK problem, we need to compare the real o and synthetic o
         :return:
         """
 
-        return torch.sqrt(functional.mse_loss(o_1, o_2)).detach().cpu().item()
+        o_1 = o_1.detach().cpu()
+        o_2 = o_2.detach().cpu()
+
+        if hasattr(self.train_set.dataset, 'o_std'):
+            o_1 = o_1 * self.train_set.dataset.o_std
+            o_2 = o_2 * self.train_set.dataset.o_std
+
+        return torch.sqrt(functional.mse_loss(o_1, o_2)).item()
 
     @abstractmethod
     def _train_epoch(self, epoch):
