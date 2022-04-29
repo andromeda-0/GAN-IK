@@ -4,3 +4,6 @@
 # IntelliJ project files
 .idea
 results_prev5
+/configs/
+/results/
+/runs/
