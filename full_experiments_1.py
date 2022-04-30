@@ -18,19 +18,13 @@ def test(args):
 
 
 if __name__ == '__main__':
-    pool = multiprocessing.Pool(4)
+    pool = multiprocessing.Pool(2)
     for learning in ['GAN', 'wGAN', 'ssGAN']:
         for z_method in ['add', 'minibatch', 'batch']:
             for generator in ['Generator_3']:
                 arg_k = Params(learning=learning, z_method=z_method, generator=generator,
                                data_path='data_3dof/IKQ_Data.mat',
                                dataset='KinematicsSetN_Normalized',
-                               gpu_id=1)
-                pool.apply_async(test, (arg_k,), error_callback=error_callback)
-
-                arg_k = Params(learning=learning, z_method=z_method, generator=generator,
-                               data_path='data_3dof/IKQ_Data.mat',
-                               dataset='KinematicsSetN',
                                gpu_id=1)
                 pool.apply_async(test, (arg_k,), error_callback=error_callback)
     pool.close()

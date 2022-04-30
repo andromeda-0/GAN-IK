@@ -1,4 +1,4 @@
-function [mse] = IK_func(max_steps, num_points)
+function [mse, percentage_converged] = IK_func(max_steps, num_points)
 
 arguments
     max_steps(1, 1) = 10000000
@@ -26,14 +26,19 @@ num_points = size(angles, 1);
 
 mse = zeros(num_points, 1);
 
-for i = 1:size(angles, 1)
+num_converged = 0;
+
+parfor (i = 1:size(angles, 1), 28)
     configuration_i = configuration(i, :);
     x_i = [configuration_i(1:3), configuration_i(5:7), configuration_i(4)];
     theta_s = zeros(3, 1);
     x_s = FK(xi, theta_s, g0);
-    theta_synthetic = IK_Pseudoinverse(xi, theta_s, x_s, x_i, g0, 0.001, 0.01, max_steps);
+    [theta_synthetic, converged] = IK_Pseudoinverse(xi, theta_s, x_s, x_i, g0, 0.001, 0.01, max_steps);
     error = mod(theta_synthetic'-angles(i, :)+pi, 2*pi) - pi;
 
     mse(i) = mean(error.^2);
+    num_converged = num_converged + converged;
 end
+
+percentage_converged = num_converged / num_points;
 end

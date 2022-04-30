@@ -232,7 +232,8 @@ class Learning(ABC):
         self.writer.add_scalar('Valid/Steady-RMSE-Mean', rmse.mean())
         self.writer.add_scalar('Valid/Steady-RMSE-Std', rmse.std())
 
-        data_string = ','.join([self.args.data_path, self.args.learning, self.args.z_method])
+        data_string = ','.join([self.args.data_path, self.train_set.dataset.__class__.__name__,
+                                self.args.learning, self.args.z_method])
         if not os.path.exists('results/'):
             os.mkdir('results')
         with open('results/' + self.config_string + '.csv', 'w') as f:

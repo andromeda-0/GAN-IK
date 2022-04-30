@@ -1,0 +1,1 @@
+data_3dof/IKQ_Data.mat,wGAN,batch,1.5652,0.2041,n_epochs:200,batch_size:64,lr_g:0.0002,lr_d:0.0002,b1:0.5,b2:0.999,data_path:data_3dof/IKQ_Data.mat,generator:Generator_3,discriminator:Discriminator,gpu_id:1,learning:wGAN,n_critic:5,std:0.1,z_method:batch,dataset:KinematicsSetN_Normalized
