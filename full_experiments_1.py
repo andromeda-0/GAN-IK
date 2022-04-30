@@ -27,5 +27,11 @@ if __name__ == '__main__':
                                dataset='KinematicsSetN_Normalized',
                                gpu_id=1)
                 pool.apply_async(test, (arg_k,), error_callback=error_callback)
+
+                arg_k = Params(learning=learning, z_method=z_method, generator=generator,
+                               data_path='data_3dof/IKQ_Data.mat',
+                               dataset='KinematicsSetN',
+                               gpu_id=1)
+                pool.apply_async(test, (arg_k,), error_callback=error_callback)
     pool.close()
     pool.join()

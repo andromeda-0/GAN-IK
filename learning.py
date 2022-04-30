@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 import numpy as np
 import scipy.io
 import torch
-import torch.nn.functional as functional
 from scipy.io import loadmat
 from torch.utils.data import DataLoader, Dataset, Subset
 from torch.utils.tensorboard import SummaryWriter
@@ -209,7 +208,12 @@ class Learning(ABC):
             o_1 = o_1 * self.train_set.dataset.o_std
             o_2 = o_2 * self.train_set.dataset.o_std
 
-        return torch.sqrt(functional.mse_loss(o_1, o_2)).item()
+        if 'Kinematics' in self.train_set.dataset.__class__.__name__:
+            error = torch.remainder(o_1 - o_2 + torch.pi, torch.pi * 2) - torch.pi
+        else:
+            error = o_1 - o_2
+
+        return torch.sqrt(torch.mean(torch.square(error))).item()
 
     @abstractmethod
     def _train_epoch(self, epoch):
