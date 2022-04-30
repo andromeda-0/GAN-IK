@@ -158,8 +158,8 @@ class Learning(ABC):
         run_id = str(vars(args))
         self.config_string = args.data_path.replace('/', '-') + hashlib.md5(
                 run_id.encode('utf-8')).hexdigest()
-        if not os.path.exists('configs/'):
-            os.mkdir('configs')
+        if not os.path.exists('results-modulo/configs/'):
+            os.mkdir('results-modulo/configs')
         with open('configs/%s.json' % self.config_string, 'w') as f:
             json.dump(vars(args), f)
         self.device = torch.device('cuda:%d' % args.gpu_id)
@@ -234,8 +234,8 @@ class Learning(ABC):
 
         data_string = ','.join([self.args.data_path, self.train_set.dataset.__class__.__name__,
                                 self.args.learning, self.args.z_method])
-        if not os.path.exists('results/'):
-            os.mkdir('results')
+        if not os.path.exists('results-modulo/results/'):
+            os.mkdir('results-modulo/results')
         with open('results/' + self.config_string + '.csv', 'w') as f:
             f.write(data_string + ',%.4f,%.4f' % (rmse.mean(), rmse.std()))
         self.writer.close()
